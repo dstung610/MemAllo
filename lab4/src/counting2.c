@@ -9,6 +9,10 @@
 
 int result;
 
+void talk(int index){
+	printf("My thread number is: %d", index);
+}
+
 int main (int argc, char **argv)
 {
 
@@ -22,18 +26,21 @@ int main (int argc, char **argv)
   }
 
   nb_threads = 10;
-  tids = malloc (nb_threads*sizeof(pthread_t)) ;
+  tids = malloc (nb_threads*sizeof(pthread_t));
 
-  for (i = 0 ; i < nb_threads; i++){
-
-  }
-
-
-  while(1){
-	for(i = 0; i < nb_threads; i++){
-		pthread_join(tids[i], NULL);
-	}
-  }
+  pthread_create(&tids[0], NULL, talk, "1");
+  pthread_join(&tids[0], NULL);
+  pthread_create(&tids[1], NULL, talk, "1");
+  pthread_create(&tids[2], NULL, talk, "2");
+  pthread_join(&tids[1], NULL);
+  pthread_join(&tids[2], NULL);
+  pthread_create(&tids[3], NULL, talk, "3");
+  pthread_create(&tids[4], NULL, talk, "4");
+  pthread_create(&tids[5], NULL, talk, "5");
+  pthread_create(&tids[6], NULL, talk, "6");
+  pthread_create(&tids[7], NULL, talk, "7");
+  pthread_create(&tids[8], NULL, talk, "8");
+  pthread_create(&tids[9], NULL, talk, "9");
 
   free (tids) ;
 
