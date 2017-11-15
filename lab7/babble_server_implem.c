@@ -17,6 +17,8 @@
 #include "babble_registration.h"
 
 time_t server_start;
+command_t command_buffer[MAX_CLIENT];
+pthread_t tids[MAX_CLIENT];
 
 /* used to create a timeline of publications*/
 typedef struct timeline_item{
@@ -109,6 +111,7 @@ void server_data_init(void)
     server_start = time(NULL);
 
     registration_init();
+    command_buffer[MAX_CLIENT]
 }
 
 /* open a socket to receive client connections */

@@ -9,6 +9,8 @@
 #include <sys/types.h>
 #include <time.h>
 #include <assert.h>
+#include <signal.h>
+#include <pthread.h>
 
 #include "babble_server.h"
 #include "babble_types.h"
@@ -178,16 +180,7 @@ static int answer_command(command_t *cmd)
     return 0;
 }
 
-
-
-int main(int argc, char *argv[])
-{
-    int sockfd, newsockfd;
-    int portno=BABBLE_PORT;
-    
-    int opt;
-    int nb_args=1;
-
+void comm_thread(int newsockfd){
     char* recv_buff=NULL;
     int recv_size=0;
 
@@ -195,66 +188,29 @@ int main(int argc, char *argv[])
     unsigned long client_key=0;
     char client_name[BABBLE_ID_SIZE+1];
 
-    while ((opt = getopt (argc, argv, "+p:")) != -1){
-        switch (opt){
-        case 'p':
-            portno = atoi(optarg);
-            nb_args+=2;
-            break;
-        case 'h':
-        case '?':
-        default:
-            display_help(argv[0]);
-            return -1;
-        }
-    }
-    
-    if(nb_args != argc){
-        display_help(argv[0]);
-        return -1;
-    }
-
-    server_data_init();
-
-    if((sockfd = server_connection_init(portno)) == -1){
-        return -1;
-    }
-
-    printf("Babble server bound to port %d\n", portno);    
-    
-    /* main server loop */
-    while(1){
-
-        if((newsockfd= server_connection_accept(sockfd))==-1){
-            return -1;
-        }
-
-        bzero(client_name, BABBLE_ID_SIZE+1);
+    bzero(client_name, BABBLE_ID_SIZE+1);
         if((recv_size = network_recv(newsockfd, (void**)&recv_buff)) < 0){
             fprintf(stderr, "Error -- recv from client\n");
-            close(newsockfd);
-            continue;
+            close(newsockfd);            
         }
 
         cmd = new_command(0);
-        
+
         if(parse_command(recv_buff, cmd) == -1 || cmd->cid != LOGIN){
             fprintf(stderr, "Error -- in LOGIN message\n");
             close(newsockfd);
             free(cmd);
-            continue;
         }
 
         /* before processing the command, we should register the
          * socket associated with the new client; this is to be done only
          * for the LOGIN command */
         cmd->sock = newsockfd;
-    
+
         if(process_command(cmd) == -1){
             fprintf(stderr, "Error -- in LOGIN\n");
             close(newsockfd);
             free(cmd);
-            continue;    
         }
 
         /* notify client of registration */
@@ -262,7 +218,6 @@ int main(int argc, char *argv[])
             fprintf(stderr, "Error -- in LOGIN ack\n");
             close(newsockfd);
             free(cmd);
-            continue;
         }
 
         /* let's store the key locally */
@@ -272,6 +227,7 @@ int main(int argc, char *argv[])
         free(recv_buff);
         free(cmd);
 
+	
         /* looping on client commands */
         while((recv_size=network_recv(newsockfd, (void**) &recv_buff)) > 0){
             cmd = new_command(client_key);
@@ -300,6 +256,52 @@ int main(int argc, char *argv[])
             }
             free(cmd);
         }
+}
+
+int main(int argc, char *argv[])
+{
+    int sockfd, newsockfd;
+    int portno=BABBLE_PORT;
+    
+    int opt;
+    int nb_args=1;
+
+    while ((opt = getopt (argc, argv, "+p:")) != -1){
+        switch (opt){
+        case 'p':
+            portno = atoi(optarg);
+            nb_args+=2;
+            break;
+        case 'h':
+        case '?':
+        default:
+            display_help(argv[0]);
+            return -1;
+        }
+    }
+    
+    if(nb_args != argc){
+        display_help(argv[0]);
+        return -1;
+    }
+
+    server_data_init();
+
+    if((sockfd = server_connection_init(portno)) == -1){
+        return -1;
+    }
+
+    printf("Babble server bound to port %d\n", portno);    
+    int thread_pointer = 0;
+    /* main server loop */
+    while(1){
+
+        if((newsockfd= server_connection_accept(sockfd))==-1){
+            return -1;
+        }
+
+        pthread_create(tids[thread_pointer], NULL, comm_thread, newsockfd);
+	thread_pointer++;
     }
     close(sockfd);
     return 0;
