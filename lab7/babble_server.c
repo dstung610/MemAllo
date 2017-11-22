@@ -260,7 +260,6 @@ void* comm_thread(void* argv){
 			pthread_mutex_unlock(&mutex);		
 		}
 		free(recv_buff);
-		free(cmd);
 	}
 
 	if(client_name[0] != 0){
@@ -296,6 +295,7 @@ void* execute_thread(void* argv){
 
 		pthread_cond_signal(&non_full);
 		pthread_mutex_unlock(&mutex);
+		free(cmd);
 	}
     return NULL;
 }
@@ -309,6 +309,7 @@ int main(int argc, char *argv[])
     
     int opt;
     int nb_args=1;
+    
 
     while ((opt = getopt (argc, argv, "+p:")) != -1){
         switch (opt){
@@ -339,6 +340,7 @@ int main(int argc, char *argv[])
     int thread_pointer = 0;
     
     pthread_t thread_exe;
+    pthread_t thread_comm;
     pthread_create(&thread_exe, NULL, execute_thread, NULL);
     /* main server loop */
     while(1){
@@ -347,8 +349,9 @@ int main(int argc, char *argv[])
             return -1;
         }
 
-        pthread_create(&tids[thread_pointer], NULL, comm_thread, newsockfd);
-		thread_pointer++;
+        //pthread_create(&tids[thread_pointer], NULL, comm_thread, newsockfd);
+        pthread_create(&thread_comm, NULL, comm_thread, newsockfd);
+		
     }
     close(sockfd);
     return 0;
