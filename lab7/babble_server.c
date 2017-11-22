@@ -194,7 +194,7 @@ void* comm_thread(void* argv){
 	while(1){
 		while(1){
 			pthread_mutex_lock(&mutex_new);
-			pthread_cond_wait(&have_new_client);
+			pthread_cond_wait(&have_new_client, &mutex_new);
 			sockfd = newsockfd;
 			pthread_mutex_unlock(&mutex_new);				
 		}
@@ -322,6 +322,7 @@ int main(int argc, char *argv[])
     
     int opt;
     int nb_args=1;
+    int N = 4; //Number of communication threads exist at a time
     
 
     while ((opt = getopt (argc, argv, "+p:")) != -1){
@@ -349,15 +350,14 @@ int main(int argc, char *argv[])
         return -1;
     }
 
-    printf("Babble server bound to port %d\n", portno);    
-    int thread_pointer = 0;
+    printf("Babble server bound to port %d\n", portno);
     
     pthread_t thread_exe;
     pthread_t thread_comm;
     pthread_create(&thread_exe, NULL, execute_thread, NULL);
     
     /* Create N communication threads at the start*/
-    for (int i; i < N; i++) {
+    for (int i = 0; i < N; i++) {
 		pthread_create(&thread_comm, NULL, comm_thread, NULL);
 	}
 	
@@ -366,8 +366,9 @@ int main(int argc, char *argv[])
         if((tempsockfd = server_connection_accept(sockfd))==-1){
             return -1;
         }
+        printf("new connection comes\n");
 		pthread_mutex_lock(&mutex_new);
-		pthread_cond_wait(&available_thread);
+		pthread_cond_wait(&available_thread, &mutex_new);
 		newsockfd = tempsockfd;
 		pthread_cond_signal(&have_new_client);
 		pthread_mutex_unlock(&mutex_new);
