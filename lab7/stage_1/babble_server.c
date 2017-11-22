@@ -18,14 +18,11 @@
 #include "babble_communication.h"
 
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t mutex_new = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t non_full = PTHREAD_COND_INITIALIZER;
 pthread_cond_t non_empty = PTHREAD_COND_INITIALIZER;
-pthread_cond_t available_thread = PTHREAD_COND_INITIALIZER;
-pthread_cond_t have_new_client = PTHREAD_COND_INITIALIZER;
 
 command_t* command_buffer[MAX_CLIENT];
-int buff_count = 0, buff_in = 0, buff_out = 0, newsockfd = -1;
+int buff_count = 0, buff_in = 0, buff_out = 0;
 pthread_t tids[MAX_CLIENT];
 
 static void display_help(char *exec)
@@ -190,101 +187,91 @@ static int answer_command(command_t *cmd)
 }
 
 void* comm_thread(void* argv){
-	int sockfd = -1;
-	while(1){
-		while(1){
-			pthread_mutex_lock(&mutex_new);
-			pthread_cond_wait(&have_new_client);
-			sockfd = newsockfd;
-			pthread_mutex_unlock(&mutex_new);				
-		}
-		char* recv_buff=NULL;
-		int recv_size=0;
+	int newsockfd = (int)argv;
+    char* recv_buff=NULL;
+    int recv_size=0;
 
-		command_t *cmd;
-		unsigned long client_key=0;
-		char client_name[BABBLE_ID_SIZE+1];
+    command_t *cmd;
+    unsigned long client_key=0;
+    char client_name[BABBLE_ID_SIZE+1];
 
-		bzero(client_name, BABBLE_ID_SIZE+1);
-		if((recv_size = network_recv(sockfd, (void**)&recv_buff)) < 0){
-			fprintf(stderr, "Error -- recv from client\n");
-			close(sockfd);            
-		}
-
-		cmd = new_command(0);
-
-		if(parse_command(recv_buff, cmd) == -1 || cmd->cid != LOGIN){
-			fprintf(stderr, "Error -- in LOGIN message\n");
-			close(sockfd);
-			free(cmd);
-		}
-
-		/* before processing the command, we should register the
-		 * socket associated with the new client; this is to be done only
-		 * for the LOGIN command */
-		cmd->sock = sockfd;
-
-		if(process_command(cmd) == -1){
-			fprintf(stderr, "Error -- in LOGIN\n");
-			close(sockfd);
-			free(cmd);
-		}
-
-		/* notify client of registration */
-		if(answer_command(cmd) == -1){
-			fprintf(stderr, "Error -- in LOGIN ack\n");
-			close(sockfd);
-			free(cmd);
-		}
-
-		/* let's store the key locally */
-		client_key = cmd->key;
-
-		strncpy(client_name, cmd->msg, BABBLE_ID_SIZE);
-		free(recv_buff);
-		free(cmd);
-
-
-		/* looping on client commands */
-		while((recv_size=network_recv(sockfd, (void**) &recv_buff)) > 0){
-			cmd = new_command(client_key);
-			if(parse_command(recv_buff, cmd) == -1){
-				fprintf(stderr, "Warning: unable to parse message from client %s\n", client_name);
-				notify_parse_error(cmd, recv_buff);
-			}
-			else{
-				pthread_mutex_lock(&mutex);
-				while (buff_count == BUFF_SIZE)
-				{
-				  pthread_cond_wait(&non_full, &mutex);
-				}
-				
-				command_buffer[buff_in] = cmd;
-				buff_in = (buff_in + 1) % BUFF_SIZE;
-				buff_count++;
-
-				if(process_command(cmd) == -1){
-					fprintf(stderr, "Warning: unable to process command from client %lu\n", client_key);
-				}
-				pthread_cond_signal(&non_empty);
-				pthread_mutex_unlock(&mutex);		
-			}
-			free(recv_buff);
-		}
-
-		if(client_name[0] != 0){
-			cmd = new_command(client_key);
-			cmd->cid= UNREGISTER;
-			
-			if(unregisted_client(cmd)){
-				fprintf(stderr,"Warning -- failed to unregister client %s\n",client_name);
-			}
-			free(cmd);
-		}
-		
-		pthread_cond_signal(&available_thread);
-
+    bzero(client_name, BABBLE_ID_SIZE+1);
+	if((recv_size = network_recv(newsockfd, (void**)&recv_buff)) < 0){
+		fprintf(stderr, "Error -- recv from client\n");
+		close(newsockfd);            
 	}
+
+	cmd = new_command(0);
+
+	if(parse_command(recv_buff, cmd) == -1 || cmd->cid != LOGIN){
+		fprintf(stderr, "Error -- in LOGIN message\n");
+		close(newsockfd);
+		free(cmd);
+	}
+
+	/* before processing the command, we should register the
+	 * socket associated with the new client; this is to be done only
+	 * for the LOGIN command */
+	cmd->sock = newsockfd;
+
+	if(process_command(cmd) == -1){
+		fprintf(stderr, "Error -- in LOGIN\n");
+		close(newsockfd);
+		free(cmd);
+	}
+
+	/* notify client of registration */
+	if(answer_command(cmd) == -1){
+		fprintf(stderr, "Error -- in LOGIN ack\n");
+		close(newsockfd);
+		free(cmd);
+	}
+
+	/* let's store the key locally */
+	client_key = cmd->key;
+
+	strncpy(client_name, cmd->msg, BABBLE_ID_SIZE);
+	free(recv_buff);
+	free(cmd);
+
+
+	/* looping on client commands */
+	while((recv_size=network_recv(newsockfd, (void**) &recv_buff)) > 0){
+		cmd = new_command(client_key);
+		if(parse_command(recv_buff, cmd) == -1){
+			fprintf(stderr, "Warning: unable to parse message from client %s\n", client_name);
+			notify_parse_error(cmd, recv_buff);
+		}
+		else{
+			pthread_mutex_lock(&mutex);
+			while (buff_count == BUFF_SIZE)
+			{
+			  pthread_cond_wait(&non_full, &mutex);
+			}
+			
+			command_buffer[buff_in] = cmd;
+			buff_in = (buff_in + 1) % BUFF_SIZE;
+			buff_count++;
+
+			if(process_command(cmd) == -1){
+				fprintf(stderr, "Warning: unable to process command from client %lu\n", client_key);
+			}
+			pthread_cond_signal(&non_empty);
+			pthread_mutex_unlock(&mutex);		
+		}
+		free(recv_buff);
+	}
+
+	if(client_name[0] != 0){
+		cmd = new_command(client_key);
+		cmd->cid= UNREGISTER;
+		
+		if(unregisted_client(cmd)){
+			fprintf(stderr,"Warning -- failed to unregister client %s\n",client_name);
+		}
+		free(cmd);
+	}
+	
 	return NULL;
 }
 
@@ -317,7 +304,7 @@ void* execute_thread(void* argv){
 
 int main(int argc, char *argv[])
 {
-    int sockfd, tempsockfd;
+    int sockfd, newsockfd;
     int portno=BABBLE_PORT;
     
     int opt;
@@ -355,22 +342,16 @@ int main(int argc, char *argv[])
     pthread_t thread_exe;
     pthread_t thread_comm;
     pthread_create(&thread_exe, NULL, execute_thread, NULL);
-    
-    /* Create N communication threads at the start*/
-    for (int i; i < N; i++) {
-		pthread_create(&thread_comm, NULL, comm_thread, NULL);
-	}
-	
     /* main server loop */
     while(1){
-        if((tempsockfd = server_connection_accept(sockfd))==-1){
+
+        if((newsockfd= server_connection_accept(sockfd))==-1){
             return -1;
         }
-		pthread_mutex_lock(&mutex_new);
-		pthread_cond_wait(&available_thread);
-		newsockfd = tempsockfd;
-		pthread_cond_signal(&have_new_client);
-		pthread_mutex_unlock(&mutex_new);
+
+        //pthread_create(&tids[thread_pointer], NULL, comm_thread, newsockfd);
+        pthread_create(&thread_comm, NULL, comm_thread, newsockfd);
+		
     }
     close(sockfd);
     return 0;
