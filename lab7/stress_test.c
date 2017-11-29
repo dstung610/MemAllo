@@ -233,6 +233,7 @@ int main(int argc, char *argv[])
         if(pthread_create (&tids[i], NULL, client_thread, (void*) &clients_data[i]) != 0){
             fprintf(stderr,"WARNING: Failed to create comm thread\n");
         }
+//	sleep(3);
     }
 
     /* barrier after all clients registered*/

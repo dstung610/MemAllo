@@ -11,6 +11,7 @@
 #include <assert.h>
 #include <signal.h>
 #include <pthread.h>
+#include <semaphore.h>
 
 #include "babble_server.h"
 #include "babble_types.h"
@@ -18,11 +19,10 @@
 #include "babble_communication.h"
 
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t mutex_new = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t non_full = PTHREAD_COND_INITIALIZER;
 pthread_cond_t non_empty = PTHREAD_COND_INITIALIZER;
-pthread_cond_t available_thread = PTHREAD_COND_INITIALIZER;
-pthread_cond_t have_new_client = PTHREAD_COND_INITIALIZER;
+sem_t available_thread;
+sem_t income_client;
 
 command_t* command_buffer[MAX_CLIENT];
 int buff_count = 0, buff_in = 0, buff_out = 0, newsockfd = -1;
@@ -191,13 +191,10 @@ static int answer_command(command_t *cmd)
 
 void* comm_thread(void* argv){
 	int sockfd = -1;
-  pthread_cond_signal(&available_thread);
 	while(1){
 		while(sockfd == -1){
-      pthread_mutex_lock(&mutex_new);
-			pthread_cond_wait(&have_new_client, &mutex_new);
+      sem_wait(&income_client);
 			sockfd = newsockfd;
-			pthread_mutex_unlock(&mutex_new);
 		}
 		char* recv_buff=NULL;
 		int recv_size=0;
@@ -283,8 +280,8 @@ void* comm_thread(void* argv){
 			free(cmd);
 		}
 
-		pthread_cond_signal(&available_thread);
     sockfd = -1;
+    sem_post(&available_thread);
 	}
 	return NULL;
 }
@@ -324,7 +321,11 @@ int main(int argc, char *argv[])
     int opt;
     int nb_args=1;
     int N = 4; //Number of communication threads exist at a time
+    int M = 4; //Number of executor threads exist at a time
 
+
+    sem_init(&available_thread, 0, N);
+    sem_init(&income_client, 0, 0);
 
     while ((opt = getopt (argc, argv, "+p:")) != -1){
         switch (opt){
@@ -355,13 +356,16 @@ int main(int argc, char *argv[])
 
     pthread_t thread_exe;
     pthread_t thread_comm;
-    pthread_create(&thread_exe, NULL, execute_thread, NULL);
+    int j;
+    for (j = 0; j < M; j++) {
+      pthread_create(&thread_exe, NULL, execute_thread, NULL);
+    }
 
     /* Create N communication threads at the start*/
     int i;
     for (i = 0; i < N; i++) {
-		pthread_create(&thread_comm, NULL, comm_thread, NULL);
-	}
+		    pthread_create(&thread_comm, NULL, comm_thread, NULL);
+    }
 
     /* main server loop */
     while(1){
@@ -369,12 +373,10 @@ int main(int argc, char *argv[])
             return -1;
         }
         printf("new connection comes\n");
-		pthread_mutex_lock(&mutex_new);
-		pthread_cond_wait(&available_thread, &mutex_new);
-		newsockfd = tempsockfd;
-		pthread_cond_signal(&have_new_client);
-		pthread_mutex_unlock(&mutex_new);
-    }
+        sem_wait(&available_thread);
+		    newsockfd = tempsockfd;
+        sem_post(&income_client);
+  }
     close(sockfd);
     return 0;
 }
