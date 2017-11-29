@@ -21,6 +21,7 @@
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t non_full = PTHREAD_COND_INITIALIZER;
 pthread_cond_t non_empty = PTHREAD_COND_INITIALIZER;
+sem_t sock_read;
 sem_t available_thread;
 sem_t income_client;
 
@@ -195,6 +196,7 @@ void* comm_thread(void* argv){
 		while(sockfd == -1){
       sem_wait(&income_client);
 			sockfd = newsockfd;
+      sem_post(&sock_read);
 		}
 		char* recv_buff=NULL;
 		int recv_size=0;
@@ -209,6 +211,7 @@ void* comm_thread(void* argv){
 			close(sockfd);
 		}
 
+    cmd = NULL;
 		cmd = new_command(0);
 
 		if(parse_command(recv_buff, cmd) == -1 || cmd->cid != LOGIN){
@@ -239,8 +242,10 @@ void* comm_thread(void* argv){
 		client_key = cmd->key;
 
 		strncpy(client_name, cmd->msg, BABBLE_ID_SIZE);
-		free(recv_buff);
-		free(cmd);
+    if (recv_buff)
+    		free(recv_buff);
+    if (cmd)
+    		free(cmd);
 
 
 		/* looping on client commands */
@@ -321,8 +326,11 @@ int main(int argc, char *argv[])
     int opt;
     int nb_args=1;
     int N = 4; //Number of communication threads exist at a time
+
+
     sem_init(&available_thread, 0, N);
     sem_init(&income_client, 0, 0);
+    sem_init(&sock_read, 0, 1);
 
     while ((opt = getopt (argc, argv, "+p:")) != -1){
         switch (opt){
@@ -353,7 +361,10 @@ int main(int argc, char *argv[])
 
     pthread_t thread_exe;
     pthread_t thread_comm;
-    pthread_create(&thread_exe, NULL, execute_thread, NULL);
+    int j;
+    for (j = 0; j < M; j++) {
+      pthread_create(&thread_exe, NULL, execute_thread, NULL);
+    }
 
     /* Create N communication threads at the start*/
     int i;
@@ -368,6 +379,7 @@ int main(int argc, char *argv[])
         }
         printf("new connection comes\n");
         sem_wait(&available_thread);
+        sem_wait(&sock_read);
 		    newsockfd = tempsockfd;
         sem_post(&income_client);
   }

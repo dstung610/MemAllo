@@ -35,7 +35,7 @@ static int parse_command(char* str, command_t *cmd)
 {
     /* start by cleaning the input */
     str_clean(str);
-    
+
     /* get command id */
     cmd->cid=str_to_command(str, &cmd->answer_expected);
 
@@ -70,7 +70,7 @@ static int parse_command(char* str, command_t *cmd)
         break;
     case RDV:
         cmd->msg[0]='\0';
-        break;    
+        break;
     default:
         fprintf(stderr,"Error -- invalid client command -> %s\n", str);
         return -1;
@@ -125,7 +125,7 @@ static int process_command(command_t *cmd)
   -- The answer is potentially composed of multiple msgs (case of a timeline)
 */
 static int answer_command(command_t *cmd)
-{    
+{
     /* case of no answer requested by the client */
     if(!cmd->answer_expected){
         if(cmd->answer.aset != NULL){
@@ -133,7 +133,7 @@ static int answer_command(command_t *cmd)
         }
         return 0;
     }
-    
+
     /* no msg to be sent */
     if(cmd->answer.size == -2){
         return 0;
@@ -150,7 +150,7 @@ static int answer_command(command_t *cmd)
         free(cmd->answer.aset);
         return 0;
     }
-    
+
 
     /* a set of msgs to be sent */
     /* number of msgs sent first */
@@ -170,7 +170,7 @@ static int answer_command(command_t *cmd)
         item = item->next;
         free(prev);
     }
-    
+
     while(item != NULL ){
         if(write_to_client(cmd->key, strlen(item->msg)+1, item->msg)){
             fprintf(stderr,"Error -- could not send set: %d\n", cmd->cid);
@@ -198,7 +198,7 @@ void* comm_thread(void* argv){
     bzero(client_name, BABBLE_ID_SIZE+1);
 	if((recv_size = network_recv(newsockfd, (void**)&recv_buff)) < 0){
 		fprintf(stderr, "Error -- recv from client\n");
-		close(newsockfd);            
+		close(newsockfd);
 	}
 
 	cmd = new_command(0);
@@ -248,7 +248,7 @@ void* comm_thread(void* argv){
 			{
 			  pthread_cond_wait(&non_full, &mutex);
 			}
-			
+
 			command_buffer[buff_in] = cmd;
 			buff_in = (buff_in + 1) % BUFF_SIZE;
 			buff_count++;
@@ -257,7 +257,7 @@ void* comm_thread(void* argv){
 				fprintf(stderr, "Warning: unable to process command from client %lu\n", client_key);
 			}
 			pthread_cond_signal(&non_empty);
-			pthread_mutex_unlock(&mutex);		
+			pthread_mutex_unlock(&mutex);
 		}
 		free(recv_buff);
 	}
@@ -265,13 +265,13 @@ void* comm_thread(void* argv){
 	if(client_name[0] != 0){
 		cmd = new_command(client_key);
 		cmd->cid= UNREGISTER;
-		
+
 		if(unregisted_client(cmd)){
 			fprintf(stderr,"Warning -- failed to unregister client %s\n",client_name);
 		}
 		free(cmd);
 	}
-	
+
 	return NULL;
 }
 
@@ -300,16 +300,16 @@ void* execute_thread(void* argv){
     return NULL;
 }
 
-    
+
 
 int main(int argc, char *argv[])
 {
     int sockfd, newsockfd;
     int portno=BABBLE_PORT;
-    
+
     int opt;
     int nb_args=1;
-    
+
 
     while ((opt = getopt (argc, argv, "+p:")) != -1){
         switch (opt){
@@ -324,7 +324,7 @@ int main(int argc, char *argv[])
             return -1;
         }
     }
-    
+
     if(nb_args != argc){
         display_help(argv[0]);
         return -1;
@@ -336,9 +336,9 @@ int main(int argc, char *argv[])
         return -1;
     }
 
-    printf("Babble server bound to port %d\n", portno);    
+    printf("Babble server bound to port %d\n", portno);
     int thread_pointer = 0;
-    
+
     pthread_t thread_exe;
     pthread_t thread_comm;
     pthread_create(&thread_exe, NULL, execute_thread, NULL);
@@ -349,9 +349,8 @@ int main(int argc, char *argv[])
             return -1;
         }
 
-        //pthread_create(&tids[thread_pointer], NULL, comm_thread, newsockfd);
         pthread_create(&thread_comm, NULL, comm_thread, newsockfd);
-		
+
     }
     close(sockfd);
     return 0;
