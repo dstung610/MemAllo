@@ -326,7 +326,7 @@ int main(int argc, char *argv[])
     int opt;
     int nb_args=1;
     int N = 4; //Number of communication threads exist at a time
-    int M = 4; //Number of executor threads exist at a time
+    int M = 2; //Number of executor threads exist at a time
 
 
     sem_init(&available_thread, 0, N);
